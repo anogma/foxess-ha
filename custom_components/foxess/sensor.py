@@ -86,6 +86,7 @@ DNS_ERROR = 101
 
 DEFAULT_NAME = "FoxESS"
 DEFAULT_VERIFY_SSL = False  # True
+DOMAIN = "foxess"
 
 SCAN_MINUTES = 1  # number of minutes betwen API requests
 SCAN_INTERVAL = timedelta(minutes=SCAN_MINUTES)
@@ -284,6 +285,9 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         # Polling interval. Will only be polled if there are subscribers.
         update_interval=SCAN_INTERVAL,
     )
+    coordinator.foxess_device_id = str(deviceID)
+    coordinator.foxess_device_sn = str(devicesn)
+    coordinator.foxess_device_name = str(name)
 
     await coordinator.async_refresh()
 
@@ -1320,7 +1324,44 @@ async def getRaw(hass, allData, apiKey, devicesn):
             return True
 
 
-class FoxESSPowerString(CoordinatorEntity, SensorEntity):
+class FoxESSEntity(CoordinatorEntity, SensorEntity):
+    @property
+    def device_info(self):
+        addressbook = self.coordinator.data.get("addressbook", {})
+        configured_device_sn = getattr(self.coordinator, "foxess_device_sn", None)
+        configured_device_id = getattr(self.coordinator, "foxess_device_id", None)
+        detected_device_sn = addressbook.get(ATTR_DEVICE_SN)
+
+        serial_number = detected_device_sn or configured_device_sn or configured_device_id
+        if serial_number is None:
+            return None
+
+        device_info = {
+            "identifiers": {(DOMAIN, str(serial_number))},
+            "name": getattr(self.coordinator, "foxess_device_name", DEFAULT_NAME),
+            "manufacturer": "FoxESS",
+        }
+
+        model = addressbook.get(ATTR_DEVICE_TYPE)
+        if model:
+            device_info["model"] = model
+
+        sw_version = addressbook.get(ATTR_MASTER)
+        if sw_version:
+            device_info["sw_version"] = sw_version
+
+        hw_version = addressbook.get(ATTR_MANAGER)
+        if hw_version:
+            device_info["hw_version"] = hw_version
+
+        module_serial = addressbook.get(ATTR_MODULESN)
+        if module_serial:
+            device_info["serial_number"] = module_serial
+
+        return device_info
+
+
+class FoxESSPowerString(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.POWER
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
@@ -1351,7 +1392,7 @@ class FoxESSPowerString(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSCurrent(CoordinatorEntity, SensorEntity):
+class FoxESSCurrent(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.CURRENT
     _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
@@ -1382,7 +1423,7 @@ class FoxESSCurrent(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSFreq(CoordinatorEntity, SensorEntity):
+class FoxESSFreq(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.FREQUENCY
     _attr_native_unit_of_measurement = UnitOfFrequency.HERTZ
@@ -1413,7 +1454,7 @@ class FoxESSFreq(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSPower(CoordinatorEntity, SensorEntity):
+class FoxESSPower(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.POWER
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
@@ -1444,7 +1485,7 @@ class FoxESSPower(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSVolt(CoordinatorEntity, SensorEntity):
+class FoxESSVolt(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.VOLTAGE
     _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
@@ -1475,7 +1516,7 @@ class FoxESSVolt(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSReactivePower(CoordinatorEntity, SensorEntity):
+class FoxESSReactivePower(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.REACTIVE_POWER
     _attr_native_unit_of_measurement = UnitOfReactivePower.VOLT_AMPERE_REACTIVE
@@ -1503,7 +1544,7 @@ class FoxESSReactivePower(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSPowerFactor(CoordinatorEntity, SensorEntity):
+class FoxESSPowerFactor(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.POWER_FACTOR
     _attr_native_unit_of_measurement = PERCENTAGE
@@ -1531,7 +1572,7 @@ class FoxESSPowerFactor(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyGenerated(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyGenerated(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1571,7 +1612,7 @@ class FoxESSEnergyGenerated(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyThroughput(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyThroughput(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1606,7 +1647,7 @@ class FoxESSEnergyThroughput(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyGridConsumption(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyGridConsumption(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1637,7 +1678,7 @@ class FoxESSEnergyGridConsumption(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyFeedin(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyFeedin(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1668,7 +1709,7 @@ class FoxESSEnergyFeedin(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyBatCharge(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyBatCharge(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1698,7 +1739,7 @@ class FoxESSEnergyBatCharge(CoordinatorEntity, SensorEntity):
             return energycharge
         return None
 
-class FoxESSMaxBatChargeCurrent(CoordinatorEntity, SensorEntity):
+class FoxESSMaxBatChargeCurrent(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.CURRENT
     _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
@@ -1728,7 +1769,7 @@ class FoxESSMaxBatChargeCurrent(CoordinatorEntity, SensorEntity):
             return charge
         return None
 
-class FoxESSMaxBatDischargeCurrent(CoordinatorEntity, SensorEntity):
+class FoxESSMaxBatDischargeCurrent(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.CURRENT
     _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
@@ -1759,7 +1800,7 @@ class FoxESSMaxBatDischargeCurrent(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyBatDischarge(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyBatDischarge(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1792,7 +1833,7 @@ class FoxESSEnergyBatDischarge(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergyLoad(CoordinatorEntity, SensorEntity):
+class FoxESSEnergyLoad(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1824,7 +1865,7 @@ class FoxESSEnergyLoad(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSPVEnergyTotal(CoordinatorEntity, SensorEntity):
+class FoxESSPVEnergyTotal(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -1856,7 +1897,7 @@ class FoxESSPVEnergyTotal(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSInverter(CoordinatorEntity, SensorEntity):
+class FoxESSInverter(FoxESSEntity):
     def __init__(self, coordinator, name, deviceID):
         super().__init__(coordinator=coordinator)
         _LOGGER.debug("Initiating Entity - Inverter")
@@ -1916,7 +1957,7 @@ class FoxESSInverter(CoordinatorEntity, SensorEntity):
         }
 
 
-class FoxESSRunningState(CoordinatorEntity, SensorEntity):
+class FoxESSRunningState(FoxESSEntity):
     def __init__(self, coordinator, name, deviceID, nameValue, uniqueValue, keyValue):
         super().__init__(coordinator=coordinator)
         self._nameValue = nameValue
@@ -1970,7 +2011,7 @@ class FoxESSRunningState(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSEnergySolar(CoordinatorEntity, SensorEntity):
+class FoxESSEnergySolar(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -2021,7 +2062,7 @@ class FoxESSEnergySolar(CoordinatorEntity, SensorEntity):
         return round(energysolar, 3)
 
 
-class FoxESSSolarPower(CoordinatorEntity, SensorEntity):
+class FoxESSSolarPower(FoxESSEntity):
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.POWER
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
@@ -2081,7 +2122,7 @@ class FoxESSSolarPower(CoordinatorEntity, SensorEntity):
         return round(total, 3)
 
 
-class FoxESSBatSoC(CoordinatorEntity, SensorEntity):
+class FoxESSBatSoC(FoxESSEntity):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_native_unit_of_measurement = "%"
 
@@ -2115,7 +2156,7 @@ class FoxESSBatSoC(CoordinatorEntity, SensorEntity):
         return icon_for_battery_level(battery_level=self.native_value, charging=None)
 
 
-class FoxESSBatMinSoC(CoordinatorEntity, SensorEntity):
+class FoxESSBatMinSoC(FoxESSEntity):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_native_unit_of_measurement = "%"
 
@@ -2146,7 +2187,7 @@ class FoxESSBatMinSoC(CoordinatorEntity, SensorEntity):
         return icon_for_battery_level(battery_level=self.native_value, charging=None)
 
 
-class FoxESSBatMinSoConGrid(CoordinatorEntity, SensorEntity):
+class FoxESSBatMinSoConGrid(FoxESSEntity):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_native_unit_of_measurement = "%"
 
@@ -2177,7 +2218,7 @@ class FoxESSBatMinSoConGrid(CoordinatorEntity, SensorEntity):
         return icon_for_battery_level(battery_level=self.native_value, charging=None)
 
 
-class FoxESSTemp(CoordinatorEntity, SensorEntity):
+class FoxESSTemp(FoxESSEntity):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
@@ -2207,7 +2248,7 @@ class FoxESSTemp(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSResidualEnergy(CoordinatorEntity, SensorEntity):
+class FoxESSResidualEnergy(FoxESSEntity):
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
 
@@ -2240,7 +2281,7 @@ class FoxESSResidualEnergy(CoordinatorEntity, SensorEntity):
         return None
 
 
-class FoxESSResponseTime(CoordinatorEntity, SensorEntity):
+class FoxESSResponseTime(FoxESSEntity):
     _attr_native_unit_of_measurement = "mS"
 
     def __init__(self, coordinator, name, deviceID):
